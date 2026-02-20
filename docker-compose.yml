@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:16-alpine
+    container_name: grh_database
+    environment:
+      POSTGRES_DB: grh_db
+      POSTGRES_USER: grh_admin
+      POSTGRES_PASSWORD: grh_secure_password_2026
+    ports:
+      - "5432:5432"
+    volumes:
+      - grh_pgdata:/var/lib/postgresql/data
+      - ./backend/src/database/migrations:/docker-entrypoint-initdb.d
+    networks:
+      - grh_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U grh_admin -d grh_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: grh_backend
+    environment:
+      - NODE_ENV=development
+      - PORT=5000
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=grh_db
+      - DB_USER=grh_admin
+      - DB_PASSWORD=grh_secure_password_2026
+      - JWT_SECRET=your_super_secret_jwt_key_change_in_production
+      - JWT_EXPIRES_IN=24h
+      - CORS_ORIGIN=http://localhost:5173
+    ports:
+      - "5000:5000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend/src:/app/src
+    networks:
+      - grh_network
+    restart: unless-stopped
+
+  # Frontend React App
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: grh_frontend
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend/src:/app/src
+    networks:
+      - grh_network
+    restart: unless-stopped
+
+volumes:
+  grh_pgdata:
+
+networks:
+  grh_network:
+    driver: bridge
